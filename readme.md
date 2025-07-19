@@ -13,3 +13,8 @@ số bên trái gọi là major(10) number số bên phải là minor(234) numbe
 
 ### Cấp phát device number
 cần thư viện  `#include <linux/fs.h>`
+### class
+bất cứ device nào cũng được nhóm vào class
+các thiết bị thường nằm trong class nào đó `/sys/class/
+Thêm 1 character device vào hệ thống thì phải khai báo file này nằm trong class nào
+có thể tự tạo ra class
