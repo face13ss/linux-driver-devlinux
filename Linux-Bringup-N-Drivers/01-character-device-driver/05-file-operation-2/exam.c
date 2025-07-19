@@ -2,17 +2,22 @@
 #include <linux/fs.h>       /* Define alloc_chrdev_region(), register_chrdev_region() */
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/slab.h>
 
 #define DRIVER_AUTHOR "dungla anhdungxd21@mail.com"
 #define DRIVER_DESC "Hello world kernel module"
 #define DRIVER_VERS "1.0"
 
+#define NPAGES 1
+
 static int m_open(struct inode *inode, struct file *file);
 static int m_release(struct inode *inode, struct file *file);
 static ssize_t m_read(struct file *filp, char __user *user_buf, size_t size, loff_t * offset);
-static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, loff_t * offset);
+static ssize_t m_write(struct file *filp, const char __user *user_buf, size_t size, loff_t * offset);
 
 struct m_chdev {
+    int32_t size;
+    char *kmalloc_ptr;
     dev_t dev_num;
     // /sys/class/
     struct class *m_class;
@@ -66,6 +71,13 @@ static int __init chdev_init(void)
         goto rm_device;
     }
 
+    /* 5.0 Allocate kernel buffer*/
+    m_dev.kmalloc_ptr = kmalloc(NPAGES * PAGE_SIZE, GFP_KERNEL);
+    if (!m_dev.kmalloc_ptr){
+        pr_err("Cannot allocate memory");
+        goto rm_device;
+    }
+
     return 0;
 
 
@@ -82,6 +94,10 @@ rm_device_numb:
 /* Tất cả tài nguyên cấp phát ở init phải được huỷ cấp phát ở exit*/
 static void __exit chdev_exit(void)
 {
+    if (m_dev.kmalloc_ptr) {
+        kfree(m_dev.kmalloc_ptr);
+        m_dev.kmalloc_ptr = NULL;
+    }
     cdev_del(&m_dev.m_cdev);
     device_destroy(m_dev.m_class, m_dev.dev_num);
     class_destroy(m_dev.m_class);
@@ -98,11 +114,37 @@ static int m_release(struct inode *inode, struct file *file){
     return 0;
 }
 static ssize_t m_read(struct file *filp, char __user *user_buf, size_t size, loff_t * offset){
+    size_t to_read;
+
     pr_info("System call read() called ...!!!\n");
-    return 0;
+    
+    /* Check size doesn't exceed our mapped area size*/
+    to_read = (size > m_dev.size - *offset) ? (m_dev.size - *offset): size;
+
+    /* Copy from mapped area to user buffer */
+    if (copy_to_user(user_buf, m_dev.kmalloc_ptr + *offset, to_read) !=0){
+        return -EFAULT;
+    }
+
+    *offset += to_read;
+    return to_read;
 }
-static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, loff_t * offset){
+static ssize_t m_write(struct file *filp, const char __user *user_buf, size_t size, loff_t * offset){
+    size_t to_write;
+
     pr_info("System call write() called ...!!!\n");
+
+    /* check size doesn't exceed our mapped area size*/
+    to_write = (size + *offset > NPAGES * PAGE_SIZE) ? (NPAGES * PAGE_SIZE - *offset) : size;
+
+    /* Copy from user buffer to mapped area */
+    memset(m_dev.kmalloc_ptr, 0, NPAGES * PAGE_SIZE);
+    if (copy_from_user(m_dev.kmalloc_ptr + *offset, user_buf, to_write) !=0){
+        return -EFAULT;
+    }
+    pr_info("Data from user: %s", m_dev.kmalloc_ptr);
+    *offset += to_write;
+    m_dev.size = *offset;
     return size;
 }
 
