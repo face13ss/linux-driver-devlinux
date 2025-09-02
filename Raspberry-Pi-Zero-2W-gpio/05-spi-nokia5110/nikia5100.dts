@@ -1,0 +1,40 @@
+/ {
+    compatible = "brcm,bcm2711", "brcm,bcm2710", "brcm,bcm2835";
+
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+            status = "okay";
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            spidev@0 {
+                status = "disabled";
+            };
+
+            nokia5110@0 {
+                compatible = "nokia5110";
+                reg = <0>;                         /* CE0 */
+                spi-max-frequency = <4000000>;
+
+                dc-gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
+                reset-gpios = <&gpio 25 GPIO_ACTIVE_HIGH>;
+
+                pinctrl-names = "default";
+                pinctrl-0 = <&nokia5110_pins>;
+                status = "okay";
+            };
+        };
+    };
+
+    fragment@1 {
+        target = <&gpio>;
+        __overlay__ {
+            nokia5110_pins: nokia5110_pins {
+                brcm,pins = <24 25>;      /* DC=24, RST=25 */
+                brcm,function = <1 1>;    /* 1 = OUTPUT */
+                brcm,pull = <0 0>;        /* 0 = none */
+            };
+        };
+    };
+};
